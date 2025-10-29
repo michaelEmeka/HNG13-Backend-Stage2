@@ -9,7 +9,9 @@ from app.utils import getCountries_ExR, generate_image, serializeCountry
 from .settings import *
 from app.models import Country
 from app.database import *
-
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+import os
 # STATIC_DIR = Path(__file__).parent / "static"
 
 CACHE_DIR = ROOT_DIR / "cache"
@@ -17,6 +19,7 @@ CACHE_DIR = ROOT_DIR / "cache"
 
 def get_db():
     db = SessionLocal()
+    print(db.execute(text("SELECT NOW();")).fetchone())
     try:
         yield db
     finally:
@@ -45,28 +48,71 @@ def RefreshCountries(db: db_dependency):
         return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=countries)
 
     try:
-        for country in countries:
-            # print(type(Country.name))
-            db_country = db.query(Country).filter(func.lower(Country.name) == country.get("name").lower()).first()
-            if db_country:
-                # country exists in database.. update enteries
-                db_country.name = country.get("name")
-                db_country.capital = country.get("capital")
-                db_country.region = country.get("region")
-                db_country.population = country.get("population")
-                db_country.currency_code = country.get("currency_code")
-                db_country.exchange_rate = country.get("exchange_rate")
-                db_country.estimated_gdp = country.get("estimated_gdp")
-                db_country.flag_url = country.get("flag_url")
-                db.commit()
-                db.refresh(db_country)
-            else:
-                db_country = Country(**country)
-                db.add(db_country)
-                db.commit()
-                db.refresh(db_country)
+        # Prepares SQL for upsert (insert or update existing rows)
+        stmt = text("""
+            INSERT INTO countries 
+                (name, capital, region, population, currency_code, exchange_rate, estimated_gdp, flag_url)
+            VALUES 
+                (:name, :capital, :region, :population, :currency_code, :exchange_rate, :estimated_gdp, :flag_url)
+            AS new
+            ON DUPLICATE KEY UPDATE
+                capital = new.capital,
+                region = new.region,
+                population = new.population,
+                currency_code = new.currency_code,
+                exchange_rate = new.exchange_rate,
+                estimated_gdp = new.estimated_gdp,
+                flag_url = new.flag_url
+        """)
+        # RETURNING id, name, capital, region, population, currency_code, exchange_rate, estimated_gdp, flag_url, last_refreshed_at;
+        # RETURNING NOT SUPPORTED IN MYSQL 8.0.35 thus we have to query db again
+
+        # Execute the single upsert statement with all countries
+        # result = db.execute(stmt, countries)
+        db.commit()
+
+        names = [c["name"] for c in countries]
+        fetch_stmt = text("""
+                     SELECT id, name, capital, region, population, currency_code, exchange_rate, estimated_gdp, flag_url, last_refreshed_at
+                     FROM countries
+                     WHERE name IN :names;
+                     """)
+        result = db.execute(fetch_stmt, {"names": tuple(names)})
+        #returns queryset
+        #updated_rows = [dict(row._mapping) for row in result]
+
+        # format updated_rows
+        updated_rows = [serializeCountry(country) for country in result]
         generate_image(countries)
-    except:
+        return updated_rows
+        # existing_countries = {c.name.lower(): c for c in db.query(Country).all()}
+
+        # new_countries = []
+        # update_mappings = []
+
+        # for country in countries:
+        #     name = country.get("name", "").lower()
+        #     if name in existing_countries:
+        #         update_mappings.append({
+        #             "id": existing_countries[name].id,
+        #             "estimated_gdp": country.get("estimated_gdp"),
+        #             "exchange_rate": country.get("exchange_rate"),
+        #             "population": country.get("population"),
+        #             "region": country.get("region"),
+        #             "capital": country.get("capital"),
+        #             "currency_code": country.get("currency_code"),
+        #             "flag_url": country.get("flag_url")
+        #         })
+        #     else:
+        #         new_countries.append(Country(**country))
+        # if update_mappings:
+        #     db.bulk_update_mappings(Country, update_mappings)
+
+        # if new_countries:
+        #     db.bulk_save_objects(new_countries)
+        # db.commit()
+    except (SQLAlchemyError, Exception) as e:
+        print("SQL Alchemy Error: ", e)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": "Internal server error"}
@@ -94,7 +140,7 @@ def getCountry(name: str, db: db_dependency):
     db_country = (
         db.query(Country).filter(func.lower(Country.name) == name.lower()).first()
     )
-    
+
     if not db_country:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -3,6 +3,7 @@ import random
 from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageFont
 from .settings import ROOT_DIR
+import os
 
 CACHE_DIR = ROOT_DIR / "cache"
 

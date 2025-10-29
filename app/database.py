@@ -3,19 +3,50 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
 import os
+import tempfile
+import atexit
+import ssl
+from sqlalchemy import text
+
 load_dotenv()
+
 # from dotenv import load_dotenv
 
 # print(DATABASE_URL)
 DATABASE_URL = os.getenv("DATABASE_URL")
-print(os.getenv("DEBUG"))
+#print(os.getenv("DEBUG"))
+#DATABASE_URL = ""
+DB_SSL_CA = os.getenv("DB_SSL_CA")
+
+if not DB_SSL_CA:
+    print("Missing DB_SSL_CA")
+
+
+
+temp_ca_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+temp_ca_file.write(DB_SSL_CA.encode("utf-8"))
+temp_ca_file.flush()
+
 
 engine = create_engine(
     DATABASE_URL,
     connect_args={
-        "ssl": {"ssl-mode": "REQUIRED"}  # pass SSL parameters as dict
-    })
+        "ssl": 
+            {
+            "ca": temp_ca_file.name,
+            "check_hostname": True,
+            "verify_mode": ssl.CERT_REQUIRED
+            }  # pass SSL parameters as dict
+    },
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+#db = SessionLocal()
+#print(db.execute(text("SELECT NOW();")).fetchone())
+#db.close()
+#db = SessionLocal()

@@ -1,12 +1,14 @@
 from sqlalchemy import Column, Integer, String, Double, DateTime, BigInteger
 from app.database import Base
 from datetime import datetime, timezone
+from sqlalchemy.sql import func
+from sqlalchemy import text
 
 class Country(Base):
     __tablename__ = "countries"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    name = Column(String(200), nullable=False, unique=True)
+    name = Column(String(200), nullable=False, unique=True, index=True)
     capital = Column(String(200), nullable=True)
     region = Column(String(50), nullable=True)
     population = Column(BigInteger, nullable=False)
@@ -16,7 +18,10 @@ class Country(Base):
 
     flag_url = Column(String(100), nullable=True)
     last_refreshed_at = Column(
-        DateTime,
-        default=datetime.now(timezone.utc),
-        onupdate=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        #default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+        #server_onupdate=text("CURRENT_TIMESTAMP")
     )
