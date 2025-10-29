@@ -49,26 +49,27 @@ def RefreshCountries(db: db_dependency):
 
     try:
         # Prepares SQL for upsert (insert or update existing rows)
-        stmt = text("""
+        stmt = text(
+            """
             INSERT INTO countries 
                 (name, capital, region, population, currency_code, exchange_rate, estimated_gdp, flag_url)
             VALUES 
                 (:name, :capital, :region, :population, :currency_code, :exchange_rate, :estimated_gdp, :flag_url)
-            AS new
             ON DUPLICATE KEY UPDATE
-                capital = new.capital,
-                region = new.region,
-                population = new.population,
-                currency_code = new.currency_code,
-                exchange_rate = new.exchange_rate,
-                estimated_gdp = new.estimated_gdp,
-                flag_url = new.flag_url
-        """)
+                capital = VALUES(capital),
+                region = VALUES(region),
+                population = VALUES(population),
+                currency_code = VALUES(currency_code),
+                exchange_rate = VALUES(exchange_rate),
+                estimated_gdp = VALUES(estimated_gdp),
+                flag_url = VALUES(flag_url);
+        """
+        )
         # RETURNING id, name, capital, region, population, currency_code, exchange_rate, estimated_gdp, flag_url, last_refreshed_at;
         # RETURNING NOT SUPPORTED IN MYSQL 8.0.35 thus we have to query db again
 
         # Execute the single upsert statement with all countries
-        # result = db.execute(stmt, countries)
+        result = db.execute(stmt, countries)
         db.commit()
 
         names = [c["name"] for c in countries]
@@ -78,8 +79,8 @@ def RefreshCountries(db: db_dependency):
                      WHERE name IN :names;
                      """)
         result = db.execute(fetch_stmt, {"names": tuple(names)})
-        #returns queryset
-        #updated_rows = [dict(row._mapping) for row in result]
+        # returns queryset
+        # updated_rows = [dict(row._mapping) for row in result]
 
         # format updated_rows
         updated_rows = [serializeCountry(country) for country in result]

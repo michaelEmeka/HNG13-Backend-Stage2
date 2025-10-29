@@ -19,9 +19,11 @@ class Country(Base):
     flag_url = Column(String(100), nullable=True)
     last_refreshed_at = Column(
         DateTime(timezone=True),
-        #default=func.now(),
+        # default=func.now(),
+        server_default=func.now(),  # set current time at creation
+        server_onupdate=func.now(),  # update automatically on any change
         onupdate=func.now(),
-        nullable=False,
-        server_default=text("CURRENT_TIMESTAMP"),
-        #server_onupdate=text("CURRENT_TIMESTAMP")
+        nullable=False
+        # server_onupdate=text("CURRENT_TIMESTAMP")
     )
+    print(func.now())
